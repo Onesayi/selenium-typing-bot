@@ -1,8 +1,11 @@
 # Typing Bot
 
-A Selenium script that does typing tests the way a person would: uneven rhythm,
+A bot that does browser typing tests the way a person would: uneven rhythm,
 realistic slips (wrong neighbouring key, swapped or doubled letters), and most
 mistakes noticed and fixed with Backspace. You set the speed and accuracy it aims for.
+
+It comes in two versions that behave the same:
+**Selenium** (`typing_bot.py`) and **Playwright** (`typing_bot_pw.py`).
 
 For practice and curiosity only. Don't submit its scores to public leaderboards
 or use it for anything that certifies typing speed, such as job application tests.
@@ -11,7 +14,11 @@ or use it for anything that certifies typing speed, such as job application test
 
 - Windows with Google Chrome
 - Python 3 (from python.org, with "Add python.exe to PATH" ticked during setup)
-- Selenium: `python -m pip install selenium` (the launcher installs it if missing)
+- For the Selenium version: `python -m pip install selenium`
+- For the Playwright version: `python -m pip install playwright` (it uses your
+  installed Chrome, so there's no separate browser download)
+
+`Typing Bot.bat` asks which version to use and installs it if it's missing.
 
 ## Step by step: typingdrill.com
 
@@ -97,12 +104,38 @@ profile automatically. Add `--headless` to run these without showing a browser w
 - **Cautious mistakes.** On unknown sites it only makes wrong-key and double-key
   slips, and fixes them straight away. Some sites move the cursor in unexpected
   ways when you type the next letter early, so it avoids swap and skip slips there.
-- **Detection.** Sites can tell that the browser is automated (Selenium sets
-  `navigator.webdriver`), and the bot doesn't hide that.
+- **Detection.** Sites can tell that the browser is automated (Selenium and
+  Playwright both set `navigator.webdriver`), and the bot doesn't hide that.
+
+## Selenium or Playwright?
+
+Every command in this README works with either file. Swap `typing_bot.py` for
+`typing_bot_pw.py` to use Playwright.
+
+| | Selenium (`typing_bot.py`) | Playwright (`typing_bot_pw.py`) |
+|---|---|---|
+| How it controls Chrome | Through a separate driver program (WebDriver) | Directly, over Chrome's own debugging connection |
+| Time to send one key | About 20 ms | A few ms |
+| Waiting for pages | Done by hand in this project's code | Built in |
+| Detectable as automated? | Yes | Yes, just as much |
+
+The faster key sending mainly helps at high speeds, where Selenium's delay starts to
+eat into the gaps between keys.
+
+### How the code is organised
+
+| File | What's in it |
+|---|---|
+| `human_typing.py` | Everything shared: the typing model, the site profiles, reading the text, the run steps |
+| `typing_bot.py` | The Selenium "browser layer" (about 90 lines) |
+| `typing_bot_pw.py` | The Playwright "browser layer" (about 110 lines) |
+
+Each browser layer only has to open a page, run JavaScript, press a key, click an
+element and close. A fix to the typing model applies to both versions.
 
 ## Adding a site to run hands-free
 
-Add an entry to `SITES` at the top of `typing_bot.py`. Open the site in Chrome,
+Add an entry to `SITES` near the top of `human_typing.py`. Open the site in Chrome,
 press **F12**, and use the element picker to find:
 
 - **Whole text shown up front** (`"mode": "passage"`): a CSS selector matching one
