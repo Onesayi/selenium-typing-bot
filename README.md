@@ -115,3 +115,7 @@ press **F12**, and use the element picker to find:
 
 Copy the `"sto"` or `"local"` entry as a starting point, then run it with
 `--site <your name>`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
