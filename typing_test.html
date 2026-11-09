@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Typing Test</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #1e1f24; color: #ccc; max-width: 820px; margin: 40px auto; padding: 0 16px; }
+  h1 { color: #e2b714; font-weight: 600; }
+  #words { font-size: 22px; line-height: 1.7; height: 120px; overflow: hidden; margin-bottom: 16px; }
+  .word { margin-right: 10px; display: inline-block; color: #777; }
+  .word.active { color: #fff; border-bottom: 2px solid #e2b714; }
+  .word.correct { color: #9ece6a; }
+  .word.incorrect { color: #f7768e; text-decoration: underline; }
+  #typing-input { font-size: 20px; padding: 8px; width: 100%; box-sizing: border-box; background: #2a2b31; color: #fff; border: 1px solid #444; }
+  #timer { font-size: 28px; color: #e2b714; margin: 12px 0; }
+  #result { font-size: 20px; margin-top: 16px; white-space: pre-line; }
+</style>
+</head>
+<body>
+<h1>Typing Test</h1>
+<div id="timer">30</div>
+<div id="words"></div>
+<input id="typing-input" autocomplete="off" autofocus placeholder="Start typing to begin...">
+<div id="result"></div>
+
+<script>
+const DURATION = 30; // seconds
+const COMMON = ("the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us").split(" ");
+
+const wordsEl = document.getElementById("words");
+const input = document.getElementById("typing-input");
+const timerEl = document.getElementById("timer");
+const resultEl = document.getElementById("result");
+
+const words = Array.from({ length: 250 }, () => COMMON[Math.floor(Math.random() * COMMON.length)]);
+const spans = words.map(w => {
+  const s = document.createElement("span");
+  s.className = "word";
+  s.textContent = w;
+  wordsEl.appendChild(s);
+  return s;
+});
+
+let idx = 0, started = false, done = false, startTime = 0;
+let correctChars = 0, keystrokes = 0, correctKeystrokes = 0, correctWords = 0, wrongWords = 0;
+spans[0].classList.add("active");
+
+input.addEventListener("keydown", e => {
+  if (done || e.key.length !== 1) return;
+  if (!started) start();
+  keystrokes++;
+  const word = words[idx], pos = input.value.length;
+  const expected = pos < word.length ? word[pos] : " ";
+  if (e.key === expected) correctKeystrokes++;
+});
+
+input.addEventListener("input", () => {
+  if (done) return;
+  if (!input.value.endsWith(" ")) return;
+  const typed = input.value.trim();
+  const span = spans[idx];
+  span.classList.remove("active");
+  if (typed === words[idx]) { span.classList.add("correct"); correctWords++; correctChars += typed.length + 1; }
+  else { span.classList.add("incorrect"); wrongWords++; }
+  input.value = "";
+  idx++;
+  if (idx >= spans.length) return finish();
+  spans[idx].classList.add("active");
+  // keep the active line in view
+  wordsEl.scrollTop = spans[idx].offsetTop - wordsEl.offsetTop - 40;
+});
+
+function start() {
+  started = true;
+  startTime = performance.now();
+  const t = setInterval(() => {
+    const left = Math.max(0, DURATION - (performance.now() - startTime) / 1000);
+    timerEl.textContent = Math.ceil(left);
+    if (left <= 0) { clearInterval(t); finish(); }
+  }, 100);
+}
+
+function finish() {
+  if (done) return;
+  done = true;
+  input.disabled = true;
+  document.querySelectorAll(".word.active").forEach(s => s.classList.remove("active"));
+  const minutes = Math.min(DURATION, (performance.now() - startTime) / 1000) / 60;
+  const wpm = Math.round(correctChars / 5 / minutes);
+  const acc = keystrokes ? (100 * correctKeystrokes / keystrokes).toFixed(1) : "0";
+  resultEl.textContent = `WPM: ${wpm}\nAccuracy: ${acc}%\nWords: ${correctWords} correct, ${wrongWords} wrong`;
+}
+</script>
+</body>
+</html>
