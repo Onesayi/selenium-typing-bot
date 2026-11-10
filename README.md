@@ -14,6 +14,7 @@ or use it for anything that certifies typing speed, such as job application test
 
 - Windows with Google Chrome
 - Python 3 (from python.org, with "Add python.exe to PATH" ticked during setup)
+- For the research study only: `python -m pip install numpy scikit-learn matplotlib`
 - For the Selenium version: `python -m pip install selenium`
 - For the Playwright version: `python -m pip install playwright` (it uses your
   installed Chrome, so there's no separate browser download)
@@ -107,6 +108,58 @@ profile automatically. Add `--headless` to run these without showing a browser w
 - **Detection.** Sites can tell that the browser is automated (Selenium and
   Playwright both set `navigator.webdriver`), and the bot doesn't hide that.
 
+## Research: can a classifier tell you from the bot?
+
+`keystroke_study.py` is a small keystroke-dynamics study. It records real typing and
+the bot's typing on the same practice page, then measures how well two simple
+classifiers can tell them apart, and which timing features give the bot away.
+
+### 1. Record yourself (a few times)
+
+```
+python keystroke_study.py record human
+```
+
+Chrome opens a 60-second test (`--seconds 30` for shorter). Type as you normally
+would. The log is saved to `data/human/` when the time runs out. **Do at least 3**:
+more sessions give more trustworthy results.
+
+You can also open `typing_test.html` in your normal browser, type the test, click
+**Download keystroke log**, and move the file into `data/human/`.
+
+### 2. Record the bot
+
+```
+python keystroke_study.py record bot --runs 5
+```
+
+The bot types the same test hidden in the background. By default it aims for the
+median speed and accuracy of your human sessions, so the classifier can't just learn
+that the bot is faster. Add `--engine selenium` to record the Selenium version.
+
+### 3. Analyse
+
+```
+python keystroke_study.py analyze
+```
+
+This prints how accurately a logistic regression and a random forest tell human
+from bot at 10, 25, 50 and 100 key presses per sample, and the features that matter
+most. It also writes `results/report.md` with charts of key timing. The scores are
+cross-validated so a session is never in both the training and test data.
+
+| Feature | What it measures |
+|---|---|
+| Flight times | Time between key presses: average, spread, percentiles, skew, and how much one gap predicts the next |
+| Hold (dwell) times | How long each key stays pressed |
+| Overlap rate | How often the next key goes down before the previous one is released |
+| Errors | Backspace rate, error rate, and how long it takes to fix a mistake |
+| Word-start pause | Gap before starting a word compared with gaps inside a word |
+
+Keystroke timing can identify a person, so `data/` is listed in `.gitignore` and your
+recordings stay on your computer. The `results/` report contains only averages and
+charts. Check it before you decide to publish it.
+
 ## Selenium or Playwright?
 
 Every command in this README works with either file. Swap `typing_bot.py` for
@@ -127,6 +180,7 @@ eat into the gaps between keys.
 | File | What's in it |
 |---|---|
 | `human_typing.py` | Everything shared: the typing model, the site profiles, reading the text, the run steps |
+| `keystroke_study.py` | The keystroke-dynamics study: recording sessions and the analysis |
 | `typing_bot.py` | The Selenium "browser layer" (about 90 lines) |
 | `typing_bot_pw.py` | The Playwright "browser layer" (about 110 lines) |
 

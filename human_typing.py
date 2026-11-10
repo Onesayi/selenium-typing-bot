@@ -436,10 +436,10 @@ def wait_ready(b, selector, timeout=START_TIMEOUT):
         time.sleep(0.25)
 
 
-def run_words(b, site, typist):
+def run_words(b, site, typist, limit=TEST_SECONDS):
     """Pages that highlight one word at a time (like typing_test.html)."""
     start = time.perf_counter()
-    while time.perf_counter() - start < TEST_SECONDS:
+    while time.perf_counter() - start < limit:
         try:
             active = b.js(ACTIVE_WORD_JS, site["active_word"])
         except BrowserError:
@@ -642,8 +642,9 @@ def parse_args(prog):
     return args
 
 
-def run(b, args):
-    """Do one typing test in browser `b`, as described by the parsed `args`."""
+def run(b, args, on_finish=None):
+    """Do one typing test in browser `b`, as described by the parsed `args`.
+    `on_finish(b)`, if given, runs after the results are read and before the browser closes."""
     site = SITES[args.site]
     try:
         try:
@@ -677,7 +678,7 @@ def run(b, args):
                         keep_aligned=site["mode"] != "words")
         start = time.perf_counter()
         if site["mode"] == "words":
-            run_words(b, site, typist)
+            run_words(b, site, typist, limit=args.max_seconds or TEST_SECONDS)
         else:
             is_done = (lambda: b.js(site["done_js"])) if site.get("done_js") else None
             type_passage(typist, text, "Lesson" if site["mode"] == "passage" else "Text",
@@ -690,6 +691,8 @@ def run(b, args):
         results = read_results(b, site)
         if results:
             print("Page says:\n" + "\n".join(results))
+        if on_finish:
+            on_finish(b)
         if site["mode"] == "manual":
             input("Check the result in Chrome, then press Enter here to close it... ")
         elif not args.headless:

@@ -3,3 +3,6 @@ __pycache__/
 .venv/
 venv/
 .claude/
+
+# Keystroke logs: typing rhythm can identify a person, so keep them local.
+data/

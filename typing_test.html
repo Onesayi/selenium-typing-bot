@@ -15,25 +15,33 @@
   #typing-input { font-size: 20px; padding: 8px; width: 100%; box-sizing: border-box; background: #2a2b31; color: #fff; border: 1px solid #444; }
   #timer { font-size: 28px; color: #e2b714; margin: 12px 0; }
   #result { font-size: 20px; margin-top: 16px; white-space: pre-line; }
+  #download { display: none; margin-top: 14px; font-size: 16px; padding: 8px 14px; background: #e2b714; color: #1e1f24; border: 0; border-radius: 6px; cursor: pointer; }
+  .note { font-size: 13px; color: #888; margin-top: 24px; }
 </style>
 </head>
 <body>
 <h1>Typing Test</h1>
-<div id="timer">30</div>
+<div id="timer"></div>
 <div id="words"></div>
 <input id="typing-input" autocomplete="off" autofocus placeholder="Start typing to begin...">
 <div id="result"></div>
+<button id="download">Download keystroke log</button>
+<p class="note">Keystrokes are recorded only in this page and only saved if you click the download
+button. Add <code>?seconds=60</code> to the address for a longer test.</p>
 
 <script>
-const DURATION = 30; // seconds
+const params = new URLSearchParams(location.search);
+const DURATION = Math.max(5, Math.min(600, parseInt(params.get("seconds") || "30", 10) || 30));
 const COMMON = ("the be to of and a in that have it for not on with he as you do at this but his by from they we say her she or an will my one all would there their what so up out if about who get which go me when make can like time no just him know take people into year your good some could them see other than then now look only come its over think also back after use two how our work first well way even new want because any these give day most us").split(" ");
 
 const wordsEl = document.getElementById("words");
 const input = document.getElementById("typing-input");
 const timerEl = document.getElementById("timer");
 const resultEl = document.getElementById("result");
+const downloadBtn = document.getElementById("download");
+timerEl.textContent = DURATION;
 
-const words = Array.from({ length: 250 }, () => COMMON[Math.floor(Math.random() * COMMON.length)]);
+const words = Array.from({ length: Math.max(250, DURATION * 6) }, () => COMMON[Math.floor(Math.random() * COMMON.length)]);
 const spans = words.map(w => {
   const s = document.createElement("span");
   s.className = "word";
@@ -45,6 +53,22 @@ const spans = words.map(w => {
 let idx = 0, started = false, done = false, startTime = 0;
 let correctChars = 0, keystrokes = 0, correctKeystrokes = 0, correctWords = 0, wrongWords = 0;
 spans[0].classList.add("active");
+
+// ---- keystroke log: every key press and release, for the keystroke-dynamics study ----
+// t = milliseconds since the page loaded (performance.now(), sub-millisecond precision).
+// ok = for a typed character: was it the expected one at that moment.
+const keylog = [];
+function logKey(e, type) {
+  if (done) return;
+  const entry = { t: +performance.now().toFixed(3), type, key: e.key, code: e.code, repeat: e.repeat, word: idx };
+  if (type === "down" && e.key.length === 1) {
+    const word = words[idx], pos = input.value.length;
+    entry.ok = e.key === (pos < word.length ? word[pos] : " ");
+  }
+  keylog.push(entry);
+}
+input.addEventListener("keydown", e => logKey(e, "down"), true);
+input.addEventListener("keyup", e => logKey(e, "up"), true);
 
 input.addEventListener("keydown", e => {
   if (done || e.key.length !== 1) return;
@@ -90,7 +114,25 @@ function finish() {
   const wpm = Math.round(correctChars / 5 / minutes);
   const acc = keystrokes ? (100 * correctKeystrokes / keystrokes).toFixed(1) : "0";
   resultEl.textContent = `WPM: ${wpm}\nAccuracy: ${acc}%\nWords: ${correctWords} correct, ${wrongWords} wrong`;
+
+  window.__keylog = {
+    format: "keylog-v1",
+    recorded: new Date().toISOString(),
+    seconds: DURATION,
+    wpm, accuracy: +acc, correctWords, wrongWords,
+    events: keylog,
+  };
+  downloadBtn.style.display = "inline-block";
 }
+
+downloadBtn.addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(window.__keylog)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "keylog-" + new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
 </script>
 </body>
 </html>
