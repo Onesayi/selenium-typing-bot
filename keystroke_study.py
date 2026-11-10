@@ -173,6 +173,19 @@ FEATURES = {
 }
 
 
+# Each set is tested separately, to see how much the result depends on which features are used.
+_RELEASE_FEATURES = {"dwell_mean", "dwell_std", "dwell_cv", "overlap_rate"}
+FEATURE_SETS = {
+    "All features": (
+        list(FEATURES),
+        "Every feature, including how long keys are held down."),
+    "Rhythm only (no hold times)": (
+        [f for f in FEATURES if f not in _RELEASE_FEATURES],
+        "Leaves out everything that depends on when keys are released (hold times and "
+        "overlap), keeping only the timing of key presses and the mistakes. This shows how "
+        "much the result depends on hold times alone."),
+}
+
 def window_features(ks):
     t = np.array([k["t"] for k in ks], float)
     flight = np.diff(t)
@@ -333,53 +346,77 @@ def analyze(a):
                      f"{statistics.median(s['log']['wpm'] for s in ss):.0f} | "
                      f"{statistics.median(s['log']['accuracy'] for s in ss):.1f}% |")
 
-    print("\nHow well can each classifier tell the labels apart?")
-    print("(cross-validated: every test session is one the model never saw in training)\n")
-    lines += ["", "## How well the classifiers tell them apart", "",
-              "Each sample is a run of consecutive key presses. Scores are cross-validated so "
-              "that every test session was unseen in training. Balanced accuracy: 50% is "
-              "guessing, 100% is perfect.", "",
-              "| Keys per sample | Samples | Logistic regression | Random forest | Random forest AUC |",
-              "|---|---|---|---|---|"]
-    rows = []
+    samples = {}
     for w in WINDOW_SIZES:
         X, y, groups = build_samples(sessions, w)
-        if len(set(y)) < 2 or min((y == c).sum() for c in set(y)) < 2:
-            continue
-        scores, importances = evaluate(X, y, groups)
-        lr, rf = scores["Logistic regression"], scores["Random forest"]
-        auc = f"{rf['auc']:.3f}" if "auc" in rf else "n/a"
-        reliable = min((y == c).sum() for c in set(y)) >= MIN_SAMPLES_PER_LABEL
-        flag = "" if reliable else " (too few samples: unreliable)"
-        print(f"  {w:>3} keys per sample ({len(y):>4} samples): logistic regression "
-              f"{lr['balanced_accuracy']:.1%}, random forest {rf['balanced_accuracy']:.1%}, AUC {auc}{flag}")
-        lines.append(f"| {w} | {len(y)}{flag} | {lr['balanced_accuracy']:.1%} | "
-                     f"{rf['balanced_accuracy']:.1%} | {auc} |")
-        rows.append((reliable, w, X, y, importances))
-    if not rows:
+        if len(set(y)) >= 2 and min((y == c).sum() for c in set(y)) >= 2:
+            samples[w] = (X, y, groups)
+    if not samples:
         sys.exit("Not enough key presses to build samples. Record longer or more sessions.")
-    # Explain features using the longest samples that still give enough data per label.
-    reliable_rows = [r for r in rows if r[0]]
-    best = reliable_rows[-1][1:] if reliable_rows else rows[0][1:]
 
-    w, X, y, importances = best
-    order = np.argsort(importances)[::-1]
-    labels = sorted(set(y))
-    lines += ["", f"## What gives each label away ({w} keys per sample)", "",
-              "Average value of each feature per label, most useful to the random forest first.", "",
-              "| Feature | What it measures | " + " | ".join(labels) + " | Importance |",
-              "|---|---|" + "---|" * len(labels) + "---|"]
-    print(f"\nMost telling features ({w} keys per sample):")
-    for i in order:
-        name = list(FEATURES)[i]
-        means = [np.nanmean(X[y == lab, i]) if np.isfinite(X[y == lab, i]).any() else np.nan for lab in labels]
-        cells = " | ".join("n/a" if np.isnan(m) else f"{m:.3g}" for m in means)
-        lines.append(f"| `{name}` | {FEATURES[name]} | {cells} | {importances[i]:.3f} |")
-    for i in order[:5]:
-        name = list(FEATURES)[i]
-        means = ", ".join(f"{lab} {np.nanmean(X[y == lab, i]):.3g}" for lab in labels
-                          if np.isfinite(X[y == lab, i]).any())
-        print(f"  {name:<18} {means}   ({FEATURES[name]})")
+    names = list(FEATURES)
+    summary = []
+    for set_name, (cols, note) in FEATURE_SETS.items():
+        idx = [names.index(c) for c in cols]
+        print()
+        print(f"=== {set_name} ({len(cols)} features) ===")
+        print("How well can each classifier tell the labels apart?")
+        print("(cross-validated: every test session is one the model never saw in training)")
+        lines += ["", f"## {set_name}", "", note, "",
+                  "Each sample is a run of consecutive key presses. Scores are cross-validated so "
+                  "that every test session was unseen in training. Balanced accuracy: 50% is "
+                  "guessing, 100% is perfect.", "",
+                  "| Keys per sample | Samples | Logistic regression | Random forest | Random forest AUC |",
+                  "|---|---|---|---|---|"]
+        rows = []
+        for w, (X_all, y, groups) in samples.items():
+            X = X_all[:, idx]
+            scores, importances = evaluate(X, y, groups)
+            lr, rf = scores["Logistic regression"], scores["Random forest"]
+            auc = f"{rf['auc']:.3f}" if "auc" in rf else "n/a"
+            reliable = min((y == c).sum() for c in set(y)) >= MIN_SAMPLES_PER_LABEL
+            flag = "" if reliable else " (too few samples: unreliable)"
+            print(f"  {w:>3} keys per sample ({len(y):>4} samples): logistic regression "
+                  f"{lr['balanced_accuracy']:.1%}, random forest {rf['balanced_accuracy']:.1%}, AUC {auc}{flag}")
+            lines.append(f"| {w} | {len(y)}{flag} | {lr['balanced_accuracy']:.1%} | "
+                         f"{rf['balanced_accuracy']:.1%} | {auc} |")
+            rows.append((reliable, w, X, y, importances, lr, rf))
+        # Explain features using the longest samples that still give enough data per label.
+        reliable_rows = [r for r in rows if r[0]]
+        _, w, X, y, importances, lr, rf = reliable_rows[-1] if reliable_rows else rows[0]
+        summary.append((set_name, w, lr["balanced_accuracy"], rf["balanced_accuracy"]))
+
+        order = np.argsort(importances)[::-1]
+        labels = sorted(set(y))
+        lines += ["", f"### What gives each label away ({w} keys per sample)", "",
+                  "Average value of each feature per label, most useful to the random forest first.", "",
+                  "| Feature | What it measures | " + " | ".join(labels) + " | Importance |",
+                  "|---|---|" + "---|" * len(labels) + "---|"]
+        print()
+        print(f"Most telling features ({w} keys per sample):")
+        for i in order:
+            name = cols[i]
+            means = [np.nanmean(X[y == lab, i]) if np.isfinite(X[y == lab, i]).any() else np.nan
+                     for lab in labels]
+            cells = " | ".join("n/a" if np.isnan(m) else f"{m:.3g}" for m in means)
+            lines.append(f"| `{name}` | {FEATURES[name]} | {cells} | {importances[i]:.3f} |")
+        for i in order[:5]:
+            name = cols[i]
+            means = ", ".join(f"{lab} {np.nanmean(X[y == lab, i]):.3g}" for lab in labels
+                              if np.isfinite(X[y == lab, i]).any())
+            print(f"  {name:<18} {means}   ({FEATURES[name]})")
+
+    # A short side-by-side summary, placed right after the data table at the top.
+    summary_block = ["", "## Summary", "",
+                     "| Feature set | Keys per sample | Logistic regression | Random forest |",
+                     "|---|---|---|---|"]
+    summary_block += [f"| {n} | {w} | {lr:.1%} | {rf:.1%} |" for n, w, lr, rf in summary]
+    first_section = lines.index("## " + next(iter(FEATURE_SETS)))
+    lines[first_section - 1:first_section - 1] = summary_block
+    print()
+    print("Summary:")
+    for n, w, lr, rf in summary:
+        print(f"  {n:<30} ({w} keys per sample): logistic regression {lr:.1%}, random forest {rf:.1%}")
 
     charts = plot_distributions(sessions, a.results)
     lines += ["", "## Timing distributions", ""] + [f"![{c}]({c})" for c in charts]

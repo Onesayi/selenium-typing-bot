@@ -148,6 +148,10 @@ from bot at 10, 25, 50 and 100 key presses per sample, and the features that mat
 most. It also writes `results/report.md` with charts of key timing. The scores are
 cross-validated so a session is never in both the training and test data.
 
+Everything runs twice: once with **all features**, and once with **rhythm only**,
+which leaves out hold times and key overlap. Comparing the two shows how much the
+result depends on how long keys are held.
+
 | Feature | What it measures |
 |---|---|
 | Flight times | Time between key presses: average, spread, percentiles, skew, and how much one gap predicts the next |
